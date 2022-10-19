@@ -10,9 +10,9 @@
         :type="inputType"
         :class="[defaultClass, $attrs.disabled ? disabledClass : '']"
         :value="value"
-        @input="evt => emitValue('input', !evt.target.value)"
-        @blur="evt => emitValue('blur', !evt.target.value)"
-        @focus="evt => emitValue('focus', !evt.target.value)"
+        @input="evt => emitValueFromTemplate('input', evt)"
+        @blur="evt => emitValueFromTemplate('blur', evt)"
+        @focus="evt => emitValueFromTemplate('focus', evt)"
       >
       <div class="password__icons">
         <div
@@ -83,6 +83,8 @@ import {
 import { zxcvbn, zxcvbnOptions } from '@zxcvbn-ts/core';
 import zxcvbnCommonPackage from '@zxcvbn-ts/language-common';
 
+type EmitType = 'show' | 'hide' | 'feedback' | 'score' | 'input' | 'blur' | 'focus';
+
 const options = {
   dictionary: {
     ...zxcvbnCommonPackage.dictionary,
@@ -95,18 +97,10 @@ export default defineComponent({
   inheritAttrs: false,
   props: {
     /**
-       * Binded value
-       * @type {String}
-       */
-    value: {
-      type: String as PropType<string>,
-      default: '',
-    },
-    /**
-       * Password min length.
-       * Right now only visual for the badge
-       * @type {Number}
-       */
+     * Password min length.
+     * Right now only visual for the badge
+     * @type {Number}
+     */
     secureLength: {
       type: Number as PropType<number>,
       default: 7,
@@ -174,7 +168,7 @@ export default defineComponent({
        */
     defaultClass: {
       type: String as PropType<string>,
-      default: 'Password__field',
+      default: 'password__field',
     },
     /**
        * CSS Class for the disabled Input field
@@ -182,7 +176,7 @@ export default defineComponent({
        */
     disabledClass: {
       type: String as PropType<string>,
-      default: 'Password__field--disabled',
+      default: 'password__field--disabled',
     },
     /**
        * CSS Class for the badge
@@ -192,7 +186,7 @@ export default defineComponent({
        */
     errorClass: {
       type: String as PropType<string>,
-      default: 'Password__badge--error',
+      default: 'password__badge--error',
     },
     /**
        * CSS Class for the badge
@@ -203,7 +197,7 @@ export default defineComponent({
        */
     successClass: {
       type: String as PropType<string>,
-      default: 'Password__badge--success',
+      default: 'password__badge--success',
     },
     /**
        * CSS class for styling the
@@ -212,7 +206,7 @@ export default defineComponent({
        */
     strengthMeterClass: {
       type: String as PropType<string>,
-      default: 'Password__strength-meter',
+      default: 'password__strength-meter',
     },
     /**
        * strengthMeterFillClass sets the
@@ -222,7 +216,7 @@ export default defineComponent({
        */
     strengthMeterFillClass: {
       type: String as PropType<string>,
-      default: 'Password__strength-meter--fill',
+      default: 'password__strength-meter--fill',
     },
     /**
        * Label for the show password icon
@@ -242,17 +236,18 @@ export default defineComponent({
        * @type String
        */
     userInputs: {
-      type: Array,
+      type: Array as PropType<string[]>,
       default: () => [],
     },
   },
-  emits: ['show', 'hide', 'feedback', 'score'],
+  emits: ['show', 'hide', 'feedback', 'score', 'input', 'blur', 'focus'] as EmitType[],
   setup(props, { emit }) {
-    const password = ref('');
+    const value = ref('');
+    const password = ref<string | null>(null);
     const initialShowPassword = ref(false);
     const showPassword = ref(false);
     const {
-      secureLength, labelHide, labelShow, value, strengthMeterOnly,
+      secureLength, labelHide, labelShow, strengthMeterOnly, userInputs,
     } = toRefs(props);
 
     const togglePassword = () => {
@@ -265,9 +260,14 @@ export default defineComponent({
       }
     };
 
-    const emitValue = (type: any, valueToEmit: string) => {
+    const emitValue = (type: EmitType, valueToEmit: string | null) => {
       emit(type, valueToEmit);
       password.value = valueToEmit;
+    };
+
+    const emitValueFromTemplate = (type: EmitType, e: Event) => {
+      const target = e.target as HTMLInputElement;
+      emitValue('input', target.value);
     };
 
     /**
@@ -275,8 +275,7 @@ export default defineComponent({
      * @return {Number} Password Strength Score
      */
     const passwordStrength = computed(() => (
-      password.value.length > 0
-        ? zxcvbn(password.value) : null));
+      password.value ? zxcvbn(password.value, (userInputs.value.length >= 1 ? userInputs.value : undefined)).score : null));
 
     /**
      * isSecure checks if the length of the password is longer then
@@ -312,11 +311,15 @@ export default defineComponent({
       if (strengthMeterOnly.value) {
         emitValue('input', newValue);
       }
+      console.log('feedback', zxcvbn(newValue));
+
       emit('feedback', zxcvbn(newValue).feedback);
     });
 
     watch(passwordStrength, (score: any) => {
-      emit('score', score);
+      console.log('score', score);
+
+      emit('score', score.score);
     });
 
     return {
@@ -330,6 +333,8 @@ export default defineComponent({
       passwordCount,
       inputType,
       showPasswordLabel,
+      emitValueFromTemplate,
+      value,
     };
   },
 });
